@@ -1,0 +1,18 @@
+version: "3.2"
+services:
+  redis:
+    image: redis:6.2.5
+    container_name: "homework_10"
+    port:
+      - 6379:6379
+  mongo_db:
+    image: mongo:5.0.2
+    container_name: "homework_10_mongo_db"
+    port:
+      - 27017:27017
+    environment:
+      MONGODB_USER: "Ulyana"
+      MONGODB_PASS: "6894"
+      MONGODB_DATABASE: "UlyanaHW10"
+    volumes:
+      -
