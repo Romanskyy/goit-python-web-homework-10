@@ -1,10 +1,8 @@
 import re
 
-from db import db
+from db import db, redis_db, list_cache
 import pymongo
 from datetime import datetime
-import redis 
-redis_db = redis.Redis(host = 'localhost', port = 6379, db = 0)
 
 
 # декоратор  - обработчик ошибок
@@ -18,11 +16,11 @@ def input_error(func):
     return hundler
 
 def lru_cache(name_action, max_size = 10):
-    list_cache = []
+    
     def wrapped(func):
         #cache = LruCache(func, name_action, max_size, db)
-        def inner(*args):
-            print(name_action, *args) 
+        def inner(*args, **kwargs):
+            print("name_action, *args",name_action, *args) 
             # ключ это (действие, параметры)
             # например ('find_one', 'vova', '123456')
             # or ('find', 'vova')
@@ -33,52 +31,58 @@ def lru_cache(name_action, max_size = 10):
             # значит она изменит данные и онм станут неактуальными
             if not name_action.startswith('find'):
                 # если имя из этого ключа есть в кеше -  удаляем ту запись
-                name = args[0]
+                #print(args)
+                name = args[0]['name']
                 # поиск имени в ключах, сохраняя найденное во временном списке
                 # нам их надо будет удалить и из list_cache и из словаря.
                 list_key_for_del = []
-                for ind, el in enumerate(list_cache):
-                    if name in el:
+                for el in list_cache:
+                    #print("name, el",name, el)
+                    if name in el.decode():
                         list_key_for_del.append(el)
+                print("list_key_for_del", list_key_for_del)
+                print("list_cache", list_cache)
 
                 # удаляем и из list_cache и из словаря.    
                 for el in list_key_for_del:
                     list_cache.remove(el)
                     redis_db.delete(el)
+                print("list_cache", list_cache)
+
                 
                 result = func(*args)
                 return result
             print('key, list_cache', key, list_cache)
             print('type key', type(key))
             # если в кеше нет такого значения
-            if key not in list_cache:
+            if key.encode() not in list_cache:
                 # таки вызываем функцию.
                 value = func(*args)
                 # формирую строку
                 if name_action == 'find':
                     result = ''
                     for el in value : 
-                        result += str(el)
+                        result += '\n' + str(el)
                 else:
                     result = str(value)
                 # записываем значение в словарь
+                print("data wasn't in cache")
+                print('key, result ',key, result) 
                 redis_db.set(key, result)
+                redis_db.get(key)
             # если нет
             else:
                 #перемещаем ключ в начало очереди
                 # сначала удаляем из очереди
-                #  надо проверить есть ли такие и данные в словаре 
-                ind = list_cache.find(key)
+                ind = list_cache.index(key.encode())
                 el = list_cache.pop(ind)
-                # еще надо выполнить функцию
                 # ставим в начало
                 list_cache.insert(0, el)
             # если очередь слишком длинная усекаем ее
             if len(list_cache) >= max_size:
                 list_cache.pop()
             # забираем значение из словаря
-            print('72 ', key, result)
-            print('--------')
+            
             result = redis_db.get(key)
             return result
         
@@ -127,7 +131,7 @@ def del_ph(data): #++
         result = my_delete_one({'name': name, 'phone': phone})
         
 
-@input_error
+#@input_error
 def del_name(data): #++
     # удаление записи  по  имени
     data = data.replace('del ', '')
@@ -141,7 +145,7 @@ def del_name(data): #++
         raise Exception("Give me only name")
 
 
-@input_error
+#@input_error
 def add_ph(data): #++
     # функция, которая добавляет имя-телефон
     data = data.replace('add ph ', '')
@@ -168,7 +172,7 @@ def add_bd(data): #++
     else:
         raise Exception("Give me name and birthday please")
 
-@input_error
+#@input_error
 def change_ph(data): #++
     #   чтобы изменить телефон. должна получить три слова
     #   name, phone, new_phone
@@ -178,13 +182,13 @@ def change_ph(data): #++
         phone = re.sub(r'[^\d]', '', phone)
         new_phone = re.sub(r'[^\d]', '', new_phone)
         # изменит телефон, если не найдет создаст новую запись name-new_phone
-        result = my_update_one({"name" : name, "phone" : phone}, 
-                            {"$set": {"name": name, "phone" : new_phone}}, 
+        result = my_update_one({"name" : name, "phone" : phone}, \
+                    {"$set": {"name": name, "phone" : new_phone}}, \
                             upsert = True)
     else:
         raise Exception("Give me name and phone please")
 
-@input_error
+#@input_error
 def change_bd(data): #++
     #   изменить день рождения. должна получить два слова
     #   name,  new_birthday
@@ -206,21 +210,20 @@ def phone(data): #++
     # простая функция поиска записи  по  имени
     data = data.replace('phone ', '')
     if len(data.split()) == 1:
-        name = data
+        name = data.strip()
         result = my_find({"name": name})    
-        print(result)
+        print(result.decode())
     else:
         raise Exception("Give me only name")
     
 
-@input_error
+#@input_error
 def show_all(data): #++
     data = data.replace('show all', '')
     result = my_find()   
-    for el in result : 
-        print(el)
+    print(result.decode())
         
-@input_error
+#@input_error
 def good_bye(data):
     # функция окончания работы и сохранения данных
     
